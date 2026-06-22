@@ -29,7 +29,11 @@ public class RequestResponseLoggingMiddleware
             return;
         }
 
-        var requestBody = await ReadRequestBodyAsync(context.Request);
+        var isSensitive = IsSensitivePath(context.Request.Path);
+
+        var requestBody = isSensitive
+            ? "[REDACTED]"
+            : await ReadRequestBodyAsync(context.Request);
         var originalResponseBody = context.Response.Body;
         await using var responseBody = new MemoryStream();
         context.Response.Body = responseBody;
@@ -43,8 +47,9 @@ public class RequestResponseLoggingMiddleware
         finally
         {
             stopwatch.Stop();
-
-            var responseJson = await ReadResponseBodyAsync(context.Response);
+            var responseJson = isSensitive
+             ? "[REDACTED]"
+            : await ReadResponseBodyAsync(context.Response);
             responseBody.Position = 0;
             await responseBody.CopyToAsync(originalResponseBody, context.RequestAborted);
             context.Response.Body = originalResponseBody;
@@ -118,5 +123,17 @@ public class RequestResponseLoggingMiddleware
         {
             _logger.LogError(ex, "Failed to save request/response log for {Method} {Path}", context.Request.Method, context.Request.Path);
         }
+    }
+    private static bool IsSensitivePath(PathString path)
+    {
+        var value = path.Value ?? string.Empty;
+
+        return value.Contains("/Auth", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("/Login", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("/Register", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("/Otp", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("/VerifyOtp", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("/Password", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("/Profile", StringComparison.OrdinalIgnoreCase);
     }
 }

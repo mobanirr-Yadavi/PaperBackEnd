@@ -2,9 +2,10 @@ using Microsoft.AspNetCore.Mvc;
 using PaperSite.Application.Common.Responses;
 using PaperSite.Application.DTOs.Auth;
 using PaperSite.Application.Interfaces;
-
+using Microsoft.AspNetCore.RateLimiting;
 namespace PaperSite.API.Controllers;
 
+[EnableRateLimiting("AuthLimiter")]
 public class AuthController : BaseController
 {
     private readonly IAuthService _authService;
