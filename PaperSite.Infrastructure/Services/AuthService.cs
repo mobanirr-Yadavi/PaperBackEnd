@@ -105,7 +105,17 @@ public class AuthService : IAuthService
         var user = await _userRepository.FirstOrDefaultAsync(x => x.PhoneNumber == mobile);
         if (user == null)
             return BaseResponse<bool>.Failure("کاربر یافت نشد");
+        var now = DateTime.Now;
 
+        var otpCountInLastMinute = await _otpRepository.Query()
+            .CountAsync(x =>
+                x.UserId == user.Id &&
+                x.CreatedAt >= now.AddMinutes(-1));
+
+        if (otpCountInLastMinute >= 3)
+        {
+            return BaseResponse<bool>.Failure("برای این شماره بیش از حد کد ارسال شده است. لطفاً یک دقیقه بعد دوباره تلاش کنید.");
+        }
         var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         var otp = new OtpCode
         {
