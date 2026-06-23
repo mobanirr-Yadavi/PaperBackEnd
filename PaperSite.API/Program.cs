@@ -166,20 +166,35 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    options.AddFixedWindowLimiter("AuthLimiter", opt =>
+    options.AddPolicy("AuthLimiter", context =>
     {
-        opt.PermitLimit = 1;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueLimit = 0;
-        opt.AutoReplenishment = true;
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var path = context.Request.Path.ToString().ToLowerInvariant();
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"{ip}:{path}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 3,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
     });
 
-    options.AddFixedWindowLimiter("GeneralLimiter", opt =>
+    options.AddPolicy("GeneralLimiter", context =>
     {
-        opt.PermitLimit = 100;
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.QueueLimit = 0;
-        opt.AutoReplenishment = true;
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: ip,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
     });
 });
 var app = builder.Build();
@@ -199,7 +214,7 @@ app.UseMiddleware<RequestResponseLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseAuthorization();
 
-app.MapControllers().RequireRateLimiting("GeneralLimiter");
+app.MapControllers();
 app.MapHealthChecks("/health");
 
 app.Run();

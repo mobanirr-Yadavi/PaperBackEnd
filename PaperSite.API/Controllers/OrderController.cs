@@ -21,7 +21,6 @@ public class OrderController : BaseController
     /// <param name="request">اطلاعات موردنیاز برای ثبت سفارش</param>
     /// <returns>سفارش ایجادشده به همراه اطلاعات پرداخت و پیگیری</returns>
     [HttpPost]
-    [Authorize(Policy = "CustomerPolicy")]
     [ProducesResponseType(typeof(BaseResponse<OrderDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(BaseResponse<OrderDto>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateOrder(CreateOrderRequest request)
