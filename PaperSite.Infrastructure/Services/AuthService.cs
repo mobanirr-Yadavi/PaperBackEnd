@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using PaperSite.Application.Common.Responses;
 using PaperSite.Application.DTOs.Auth;
 using PaperSite.Application.Interfaces;
+using System.Security.Cryptography;
 using PaperSite.Domain.Entities;
 
 namespace PaperSite.Infrastructure.Services;
@@ -14,6 +15,7 @@ public class AuthService : IAuthService
     private readonly IRepository<OtpCode> _otpRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly PasswordHasher<User> _passwordHasher = new();
+    private readonly PasswordHasher<OtpCode> _otpHasher = new();
     private readonly IJWtService _jwtService;
     private readonly ISmsService _smsService;
 
@@ -104,17 +106,15 @@ public class AuthService : IAuthService
         if (user == null)
             return BaseResponse<bool>.Failure("کاربر یافت نشد");
 
-        var code = new Random().Next(100000, 999999).ToString();
-
+        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         var otp = new OtpCode
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
             User = user,
-            CodeHash = code,
             ExpiresAt = DateTime.Now.AddMinutes(2)
         };
-
+        otp.CodeHash = _otpHasher.HashPassword(otp, code);
         await _otpRepository.AddAsync(otp);
         await _unitOfWork.SaveChangesAsync();
 
@@ -128,28 +128,46 @@ public class AuthService : IAuthService
     public async Task<BaseResponse<string>> VerifyOtpAsync(string mobile, string code)
     {
         var user = await _userRepository.Query()
-            .Include(x => x.Role)
-            .FirstOrDefaultAsync(x => x.PhoneNumber == mobile);
+      .Include(x => x.Role)
+      .FirstOrDefaultAsync(x => x.PhoneNumber == mobile);
 
         if (user == null)
+        {
             return BaseResponse<string>.Failure("کاربر یافت نشد");
+        }
 
-        var otp = await _otpRepository.Query()
-            .Where(x => x.UserId == user.Id && x.CodeHash == code && x.UsedAt == null)
+        var now = DateTime.UtcNow;
+
+        var otpCodes = await _otpRepository.Query()
+            .Where(x =>
+                x.UserId == user.Id &&
+                x.UsedAt == null &&
+                x.ExpiresAt >= now)
             .OrderByDescending(x => x.CreatedAt)
-            .FirstOrDefaultAsync();
+            .Take(5)
+            .ToListAsync();
+
+        var otp = otpCodes.FirstOrDefault(x =>
+        {
+            var result = _otpHasher.VerifyHashedPassword(x, x.CodeHash, code);
+
+            return result == PasswordVerificationResult.Success ||
+                   result == PasswordVerificationResult.SuccessRehashNeeded;
+        });
 
         if (otp == null)
-            return BaseResponse<string>.Failure("کد اشتباه است");
+        {
+            return BaseResponse<string>.Failure("کد اشتباه یا منقضی شده است");
+        }
 
-        if (otp.ExpiresAt < DateTime.Now)
-            return BaseResponse<string>.Failure("کد منقضی شده است");
+        otp.UsedAt = now;
+        otp.UpdatedAt = now;
 
-        otp.UsedAt = DateTime.Now;
         _otpRepository.Update(otp);
         await _unitOfWork.SaveChangesAsync();
 
         var token = _jwtService.GenerateToken(user);
+
         return BaseResponse<string>.Success(token, "ورود موفق");
     }
 }
