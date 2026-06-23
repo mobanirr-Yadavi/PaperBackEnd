@@ -7,7 +7,14 @@ public class UpdateCartItemQuantityRequestValidator : AbstractValidator<UpdateCa
 {
     public UpdateCartItemQuantityRequestValidator()
     {
-        RuleFor(x => x.ProductId).NotEmpty();
-        RuleFor(x => x.Quantity).GreaterThan(0);
+        RuleFor(x => x.ProductId)
+                 .NotEmpty()
+                 .WithMessage("انتخاب محصول الزامی است.");
+
+        RuleFor(x => x.Quantity)
+            .GreaterThan(0)
+            .WithMessage("تعداد باید بزرگ‌تر از صفر باشد.")
+            .LessThanOrEqualTo(1000)
+            .WithMessage("تعداد وارد شده بیش از حد مجاز است.");
     }
 }

@@ -6,7 +6,7 @@ using PaperSite.Application.Interfaces;
 
 namespace PaperSite.API.Controllers;
 
-[Authorize(Policy = "CustomerPolicy")]
+[Authorize]
 public class CartController : BaseController
 {
     private readonly ICartService _cartService;
