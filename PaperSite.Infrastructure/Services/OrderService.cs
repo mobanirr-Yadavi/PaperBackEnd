@@ -4,6 +4,7 @@ using PaperSite.Application.DTOs.Order;
 using PaperSite.Application.Interfaces;
 using PaperSite.Domain.Entities;
 using PaperSite.Domain.Enums;
+using PaperSite.Infrastructure.Persistence;
 
 namespace PaperSite.Infrastructure.Services;
 
@@ -12,12 +13,14 @@ public class OrderService : IOrderService
     private readonly IRepository<Order> _orderRepository;
     private readonly IRepository<Product> _productRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ApplicationDbContext _dbContext;
 
-    public OrderService(IRepository<Order> orderRepository, IRepository<Product> productRepository, IUnitOfWork unitOfWork)
+    public OrderService(IRepository<Order> orderRepository, IRepository<Product> productRepository, IUnitOfWork unitOfWork, ApplicationDbContext dbContext)
     {
         _orderRepository = orderRepository;
         _productRepository = productRepository;
         _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
     }
 
     public async Task<BaseResponse<OrderDto>> CreateAsync(Guid userId, CreateOrderRequest request)
@@ -28,7 +31,7 @@ public class OrderService : IOrderService
             .ToList();
 
         var productIds = groupedItems.Select(x => x.ProductId).ToList();
-        var products = await _productRepository.Query().Where(x => productIds.Contains(x.Id)).ToListAsync();
+        var products = await _productRepository.Query(true).Where(x => productIds.Contains(x.Id)).ToListAsync();
 
         if (products.Count != productIds.Count)
         {
@@ -54,11 +57,22 @@ public class OrderService : IOrderService
             ReceiverPhoneNumber = request.ReceiverPhoneNumber
         };
 
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+
         foreach (var item in groupedItems)
         {
             var product = products.First(x => x.Id == item.ProductId);
-            product.Stock -= item.Quantity;
-            _productRepository.Update(product);
+            var updated = await _dbContext.Products
+                .Where(x => x.Id == product.Id && x.Stock >= item.Quantity)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.Stock, x => x.Stock - item.Quantity)
+                    .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
+
+            if (updated == 0)
+            {
+                await transaction.RollbackAsync();
+                return BaseResponse<OrderDto>.Failure($"موجودی محصول '{product.Name}' کافی نیست");
+            }
 
             order.Items.Add(new OrderItem
             {
@@ -74,6 +88,7 @@ public class OrderService : IOrderService
         order.TotalAmount = order.Items.Sum(x => x.TotalPrice);
         await _orderRepository.AddAsync(order);
         await _unitOfWork.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return BaseResponse<OrderDto>.Success(ToDto(order), "سفارش با موفقیت ثبت شد");
     }

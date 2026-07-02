@@ -29,15 +29,6 @@ public class RequestResponseLoggingMiddleware
             return;
         }
 
-        var isSensitive = IsSensitivePath(context.Request.Path);
-
-        var requestBody = isSensitive
-            ? "[REDACTED]"
-            : await ReadRequestBodyAsync(context.Request);
-        var originalResponseBody = context.Response.Body;
-        await using var responseBody = new MemoryStream();
-        context.Response.Body = responseBody;
-
         var stopwatch = Stopwatch.StartNew();
 
         try
@@ -47,56 +38,18 @@ public class RequestResponseLoggingMiddleware
         finally
         {
             stopwatch.Stop();
-            var responseJson = isSensitive
-             ? "[REDACTED]"
-            : await ReadResponseBodyAsync(context.Response);
-            responseBody.Position = 0;
-            await responseBody.CopyToAsync(originalResponseBody, context.RequestAborted);
-            context.Response.Body = originalResponseBody;
-
             await SaveLogAsync(
                 logService,
                 context,
                 controllerAction.ControllerName,
-                requestBody,
-                responseJson,
                 stopwatch.ElapsedMilliseconds);
         }
-    }
-
-    private static async Task<string> ReadRequestBodyAsync(HttpRequest request)
-    {
-        request.EnableBuffering();
-
-        if (request.ContentLength is null or 0)
-        {
-            return string.Empty;
-        }
-
-        request.Body.Position = 0;
-        using var reader = new StreamReader(request.Body, leaveOpen: true);
-        var body = await reader.ReadToEndAsync();
-        request.Body.Position = 0;
-
-        return body;
-    }
-
-    private static async Task<string> ReadResponseBodyAsync(HttpResponse response)
-    {
-        response.Body.Position = 0;
-        using var reader = new StreamReader(response.Body, leaveOpen: true);
-        var body = await reader.ReadToEndAsync();
-        response.Body.Position = 0;
-
-        return body;
     }
 
     private async Task SaveLogAsync(
         ILogService logService,
         HttpContext context,
         string controllerName,
-        string requestBody,
-        string responseJson,
         long executionTimeMs)
     {
         try
@@ -107,8 +60,8 @@ public class RequestResponseLoggingMiddleware
             var log = new Log
             {
                 controllerName = controllerName,
-                requestJson = requestBody,
-                responseJson = responseJson,
+                requestJson = string.Empty,
+                responseJson = string.Empty,
                 persianDate = $"{persianCalendar.GetYear(now):0000}/{persianCalendar.GetMonth(now):00}/{persianCalendar.GetDayOfMonth(now):00}",
                 Time = now.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
                 statusCode = context.Response.StatusCode,
@@ -123,17 +76,5 @@ public class RequestResponseLoggingMiddleware
         {
             _logger.LogError(ex, "Failed to save request/response log for {Method} {Path}", context.Request.Method, context.Request.Path);
         }
-    }
-    private static bool IsSensitivePath(PathString path)
-    {
-        var value = path.Value ?? string.Empty;
-
-        return value.Contains("/Auth", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("/Login", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("/Register", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("/Otp", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("/VerifyOtp", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("/Password", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("/Profile", StringComparison.OrdinalIgnoreCase);
     }
 }

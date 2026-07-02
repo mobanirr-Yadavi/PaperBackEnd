@@ -6,6 +6,6 @@ namespace PaperSite.Application.DTOs.Auth
 {
     public class SendOtpRequest
     {
-        public string? mobileNo { get; set; }
+        public string mobileNo { get; set; } = string.Empty;
     }
 }

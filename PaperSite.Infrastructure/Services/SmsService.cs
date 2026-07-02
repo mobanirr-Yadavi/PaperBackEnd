@@ -38,20 +38,17 @@ namespace PaperSite.Infrastructure.Services
             
             var json = JsonSerializer.Serialize(request);
 
-            var httpRequest = new HttpRequestMessage(
+            using var httpRequest = new HttpRequestMessage(
                 HttpMethod.Post,
-                "https://api.sms.ir/v1/send/verify"
+                "v1/send/verify"
             );
 
             httpRequest.Content = new StringContent(json, Encoding.UTF8, "application/json");
             httpRequest.Headers.Add("x-api-key", _settings.ApiKey);
 
-            var response = await _httpClient.SendAsync(httpRequest);
-            var x = response;
-            var result = await response.Content.ReadAsStringAsync();
-            Console.WriteLine(result);
+            using var response = await _httpClient.SendAsync(httpRequest);
             if (!response.IsSuccessStatusCode)
-                return BaseResponse<bool>.Failure("ایمیل یا گذرواژه نامعتبر است");
+                return BaseResponse<bool>.Failure("ارسال پیامک ناموفق بود");
             return BaseResponse<bool>.Success(true, "پیامک ارسال شد");
 
         }

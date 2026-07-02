@@ -24,8 +24,8 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
 
     public async Task AddAsync(T entity)
     {
-        entity.CreatedAt = DateTime.Now;
-        entity.UpdatedAt = DateTime.Now;
+        entity.CreatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.UtcNow;
         await DbSet.AddAsync(entity);
     }
 
@@ -51,7 +51,7 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
 
     public void Update(T entity)
     {
-        entity.UpdatedAt = DateTime.Now;
+        entity.UpdatedAt = DateTime.UtcNow;
         DbSet.Update(entity);
     }
 
@@ -63,7 +63,7 @@ public class Repository<T> : IRepository<T> where T : BaseEntity
     public void Delete(T entity)
     {
         entity.IsDeleted = true;
-        entity.UpdatedAt = DateTime.Now;
+        entity.UpdatedAt = DateTime.UtcNow;
         DbSet.Update(entity);
     }
 }

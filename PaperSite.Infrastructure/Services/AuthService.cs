@@ -104,8 +104,8 @@ public class AuthService : IAuthService
     {
         var user = await _userRepository.FirstOrDefaultAsync(x => x.PhoneNumber == mobile);
         if (user == null)
-            return BaseResponse<bool>.Failure("کاربر یافت نشد");
-        var now = DateTime.Now;
+            return BaseResponse<bool>.Success(true, "اگر شماره ثبت شده باشد، کد ارسال می‌شود");
+        var now = DateTime.UtcNow;
 
         var otpCountInLastMinute = await _otpRepository.Query()
             .CountAsync(x =>
@@ -122,7 +122,7 @@ public class AuthService : IAuthService
             Id = Guid.NewGuid(),
             UserId = user.Id,
             User = user,
-            ExpiresAt = DateTime.Now.AddMinutes(2)
+            ExpiresAt = now.AddMinutes(2)
         };
         otp.CodeHash = _otpHasher.HashPassword(otp, code);
         await _otpRepository.AddAsync(otp);
@@ -142,9 +142,7 @@ public class AuthService : IAuthService
       .FirstOrDefaultAsync(x => x.PhoneNumber == mobile);
 
         if (user == null)
-        {
-            return BaseResponse<string>.Failure("کاربر یافت نشد");
-        }
+            return BaseResponse<string>.Failure("کد اشتباه یا منقضی شده است");
 
         var now = DateTime.UtcNow;
 

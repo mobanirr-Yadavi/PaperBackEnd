@@ -49,7 +49,7 @@ public class AuthController : BaseController
     /// <param name="request">اطلاعات ورود با رمز یگبارمصرف </param>
     /// <returns>ارسال پیامک</returns>
     [HttpPost]
-    [EnableRateLimiting("AuthLimiter")]
+    [EnableRateLimiting("OtpLimiter")]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SendOtp(SendOtpRequest request)

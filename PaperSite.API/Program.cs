@@ -23,6 +23,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 1_048_576);
+
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
     {
@@ -44,7 +46,16 @@ builder.Services.AddControllers()
 builder.Services.Configure<SmsSettings>(
     builder.Configuration.GetSection("Sms")
 );
-builder.Services.AddHttpClient<ISmsService, SmsService>();
+builder.Services.AddOptions<SmsSettings>()
+    .Bind(builder.Configuration.GetSection("Sms"))
+    .Validate(x => !string.IsNullOrWhiteSpace(x.ApiKey), "Sms:ApiKey is required.")
+    .Validate(x => int.TryParse(x.TemplateId, out _), "Sms:TemplateId must be numeric.")
+    .ValidateOnStart();
+builder.Services.AddHttpClient<ISmsService, SmsService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.sms.ir/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -166,6 +177,20 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var key = context.User.Identity?.IsAuthenticated == true
+            ? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            : context.Connection.RemoteIpAddress?.ToString();
+        return RateLimitPartition.GetFixedWindowLimiter(key ?? "unknown", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+    });
+
     options.AddPolicy("AuthLimiter", context =>
     {
         var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -175,29 +200,26 @@ builder.Services.AddRateLimiter(options =>
             partitionKey: $"{ip}:{path}",
             factory: _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 100,
+                PermitLimit = 10,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
             });
     });
 
-    options.AddPolicy("GeneralLimiter", context =>
-    {
-        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: ip,
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 100,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            });
-    });
+    options.AddPolicy("OtpLimiter", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 3,
+            Window = TimeSpan.FromMinutes(10),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
 });
 var app = builder.Build();
+
+if (!app.Environment.IsDevelopment() && string.Equals(builder.Configuration["AllowedHosts"], "*", StringComparison.Ordinal))
+    throw new InvalidOperationException("AllowedHosts must be restricted in production.");
 
 if (app.Environment.IsDevelopment())
 {
@@ -206,10 +228,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment()) app.UseHsts();
 app.UseRouting();
-app.UseRateLimiter();
-
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseMiddleware<RequestResponseLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseAuthorization();
