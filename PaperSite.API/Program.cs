@@ -21,6 +21,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 1_048_576);
@@ -46,6 +47,15 @@ builder.Services.AddControllers()
 builder.Services.Configure<SmsSettings>(
     builder.Configuration.GetSection("Sms")
 );
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto;
+
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddOptions<SmsSettings>()
     .Bind(builder.Configuration.GetSection("Sms"))
     .Validate(x => !string.IsNullOrWhiteSpace(x.ApiKey), "Sms:ApiKey is required.")
@@ -226,6 +236,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+app.UseForwardedHeaders();
 
 app.UseHttpsRedirection();
 if (!app.Environment.IsDevelopment()) app.UseHsts();
