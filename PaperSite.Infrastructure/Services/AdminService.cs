@@ -12,12 +12,14 @@ public class AdminService : IAdminService
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Order> _orderRepository;
     private readonly IRepository<Product> _productRepository;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public AdminService(IRepository<User> userRepository, IRepository<Order> orderRepository, IRepository<Product> productRepository)
+    public AdminService(IRepository<User> userRepository, IRepository<Order> orderRepository, IRepository<Product> productRepository, IUnitOfWork unitOfWork)
     {
         _userRepository = userRepository;
         _orderRepository = orderRepository;
         _productRepository = productRepository;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<BaseResponse<IEnumerable<UserDto>>> GetAllUsersAsync()
@@ -32,6 +34,24 @@ public class AdminService : IAdminService
         return user == null
             ? BaseResponse<UserDto>.Failure("کاربر یافت نشد")
             : BaseResponse<UserDto>.Success(ToDto(user), "جزئیات کاربر با موفقیت بازیابی شد");
+    }
+
+    public async Task<BaseResponse<bool>> DeleteUserAsync(Guid userId, Guid currentUserId)
+    {
+        if (userId == currentUserId)
+        {
+            return BaseResponse<bool>.Failure("Admin cannot delete the current signed-in account");
+        }
+
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null)
+        {
+            return BaseResponse<bool>.Failure("User not found");
+        }
+
+        _userRepository.Delete(user);
+        await _unitOfWork.SaveChangesAsync();
+        return BaseResponse<bool>.Success(true, "User deleted successfully");
     }
 
     public async Task<BaseResponse<DashboardStatisticsDto>> GetDashboardStatisticsAsync()

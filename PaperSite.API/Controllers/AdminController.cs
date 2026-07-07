@@ -42,6 +42,23 @@ public class AdminController : BaseController
         return result.IsSuccess ? Ok(result) : NotFound(result);
     }
     /// <summary>
+    /// حذف کاربر
+    /// </summary>
+    /// <param name="id">شناسه کاربر</param>
+    /// <returns>نتیجه عملیات حذف کاربر</returns>
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(BaseResponse<bool>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteUser(Guid id)
+    {
+        var result = await _adminService.DeleteUserAsync(id, CurrentUserId);
+        if (result.IsSuccess) return Ok(result);
+        return string.Equals(result.Message, "User not found", StringComparison.OrdinalIgnoreCase)
+            ? NotFound(result)
+            : BadRequest(result);
+    }
+    /// <summary>
     /// دریافت لیست تمامی سفارش‌ها
     /// </summary>
     /// <returns></returns>

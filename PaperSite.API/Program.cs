@@ -44,6 +44,26 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? Array.Empty<string>();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendCors", policy =>
+    {
+        if (allowedOrigins.Length > 0)
+        {
+            policy.WithOrigins(allowedOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+        else if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin()
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        }
+    });
+});
 builder.Services.Configure<SmsSettings>(
     builder.Configuration.GetSection("Sms")
 );
@@ -241,6 +261,7 @@ app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 if (!app.Environment.IsDevelopment()) app.UseHsts();
 app.UseRouting();
+app.UseCors("FrontendCors");
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseMiddleware<RequestResponseLoggingMiddleware>();
