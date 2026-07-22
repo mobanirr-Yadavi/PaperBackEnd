@@ -12,8 +12,8 @@ using PaperSite.Infrastructure.Persistence;
 namespace PaperSite.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260613122556_AddOtpCodes")]
-    partial class AddOtpCodes
+    [Migration("20260722062421_init")]
+    partial class init
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
