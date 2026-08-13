@@ -102,80 +102,279 @@ public class AuthService : IAuthService
     }
     public async Task<BaseResponse<bool>> SendOtpAsync(string mobile)
     {
-        var user = await _userRepository.FirstOrDefaultAsync(x => x.PhoneNumber == mobile);
-        if (user == null)
-            return BaseResponse<bool>.Success(true, "اگر شماره ثبت شده باشد، کد ارسال می‌شود");
+        mobile = mobile.Trim();
+
+        if (string.IsNullOrWhiteSpace(mobile))
+        {
+            return BaseResponse<bool>.Failure(
+                "شماره موبایل الزامی است"
+            );
+        }
+
         var now = DateTime.UtcNow;
 
         var otpCountInLastMinute = await _otpRepository.Query()
             .CountAsync(x =>
-                x.UserId == user.Id &&
+                x.PhoneNumber == mobile &&
                 x.CreatedAt >= now.AddMinutes(-1));
 
         if (otpCountInLastMinute >= 3)
         {
-            return BaseResponse<bool>.Failure("برای این شماره بیش از حد کد ارسال شده است. لطفاً یک دقیقه بعد دوباره تلاش کنید.");
+            return BaseResponse<bool>.Failure(
+                "تعداد درخواست کد بیش از حد مجاز است. لطفاً کمی بعد دوباره تلاش کنید."
+            );
         }
-        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+
+        var code = RandomNumberGenerator
+            .GetInt32(100000, 1000000)
+            .ToString();
+
         var otp = new OtpCode
         {
             Id = Guid.NewGuid(),
-            UserId = user.Id,
-            User = user,
+            PhoneNumber = mobile,
             ExpiresAt = now.AddMinutes(2)
         };
+
         otp.CodeHash = _otpHasher.HashPassword(otp, code);
+
         await _otpRepository.AddAsync(otp);
         await _unitOfWork.SaveChangesAsync();
 
         var smsResult = await _smsService.SendOtpAsync(mobile, code);
+
         if (!smsResult.IsSuccess)
-            return BaseResponse<bool>.Failure("ارسال پیامک ناموفق بود");
+        {
+            return BaseResponse<bool>.Failure(
+                "ارسال پیامک ناموفق بود"
+            );
+        }
 
-        return BaseResponse<bool>.Success(true, "کد ارسال شد");
+        return BaseResponse<bool>.Success(
+            true,
+            "کد تایید ارسال شد"
+        );
     }
-
-    public async Task<BaseResponse<string>> VerifyOtpAsync(string mobile, string code)
+    public async Task<BaseResponse<VerifyOtpResponse>> VerifyOtpAsync(
+    string mobile,
+    string code)
     {
-        var user = await _userRepository.Query()
-      .Include(x => x.Role)
-      .FirstOrDefaultAsync(x => x.PhoneNumber == mobile);
-
-        if (user == null)
-            return BaseResponse<string>.Failure("کد اشتباه یا منقضی شده است");
+        mobile = mobile.Trim();
 
         var now = DateTime.UtcNow;
 
-        var otpCodes = await _otpRepository.Query()
+        // فقط آخرین OTP معتبر را قبول می‌کنیم
+        var otp = await _otpRepository.Query()
             .Where(x =>
-                x.UserId == user.Id &&
+                x.PhoneNumber == mobile &&
                 x.UsedAt == null &&
                 x.ExpiresAt >= now)
             .OrderByDescending(x => x.CreatedAt)
-            .Take(5)
-            .ToListAsync();
-
-        var otp = otpCodes.FirstOrDefault(x =>
-        {
-            var result = _otpHasher.VerifyHashedPassword(x, x.CodeHash, code);
-
-            return result == PasswordVerificationResult.Success ||
-                   result == PasswordVerificationResult.SuccessRehashNeeded;
-        });
+            .FirstOrDefaultAsync();
 
         if (otp == null)
         {
-            return BaseResponse<string>.Failure("کد اشتباه یا منقضی شده است");
+            return BaseResponse<VerifyOtpResponse>.Failure(
+                "کد تایید اشتباه یا منقضی شده است"
+            );
         }
 
+        // جلوگیری از Brute Force
+        if (otp.FailedAttempts >= 5)
+        {
+            return BaseResponse<VerifyOtpResponse>.Failure(
+                "تعداد تلاش‌های ناموفق بیش از حد مجاز است. کد جدید دریافت کنید."
+            );
+        }
+
+        var verifyResult =
+            _otpHasher.VerifyHashedPassword(
+                otp,
+                otp.CodeHash,
+                code
+            );
+
+        if (verifyResult == PasswordVerificationResult.Failed)
+        {
+            otp.FailedAttempts++;
+            otp.UpdatedAt = now;
+
+            _otpRepository.Update(otp);
+            await _unitOfWork.SaveChangesAsync();
+
+            return BaseResponse<VerifyOtpResponse>.Failure(
+                "کد تایید اشتباه یا منقضی شده است"
+            );
+        }
+
+        // OTP فقط یک بار قابل استفاده است
         otp.UsedAt = now;
         otp.UpdatedAt = now;
 
         _otpRepository.Update(otp);
         await _unitOfWork.SaveChangesAsync();
 
-        var token = _jwtService.GenerateToken(user);
+        // آیا کاربر قبلاً ثبت نام کرده؟
+        var user = await _userRepository.Query()
+            .Include(x => x.Role)
+            .FirstOrDefaultAsync(
+                x => x.PhoneNumber == mobile
+            );
 
-        return BaseResponse<string>.Success(token, "ورود موفق");
+        // کاربر قدیمی
+        if (user != null)
+        {
+            var accessToken =
+                _jwtService.GenerateToken(user);
+
+            return BaseResponse<VerifyOtpResponse>.Success(
+                new VerifyOtpResponse
+                {
+                    IsRegistered = true,
+                    AccessToken = accessToken,
+                    RegistrationToken = null,
+                    UserId = user.Id,
+                    Role = user.Role.Name
+                },
+                "ورود با موفقیت انجام شد"
+            );
+        }
+
+        // کاربر جدید
+        var registrationToken =
+            _jwtService.GenerateRegistrationToken(mobile);
+
+        return BaseResponse<VerifyOtpResponse>.Success(
+            new VerifyOtpResponse
+            {
+                IsRegistered = false,
+                AccessToken = null,
+                RegistrationToken = registrationToken,
+                UserId = null,
+                Role = null
+            },
+            "شماره موبایل تایید شد. لطفاً اطلاعات خود را تکمیل کنید."
+        );
+    }
+    public async Task<BaseResponse<VerifyOtpResponse>>
+    
+        
+        CompleteRegistrationAsync(
+        CompleteRegistrationRequest request)
+    {
+        // شماره موبایل فقط از توکن استخراج می‌شود
+        var mobile =
+            _jwtService.ValidateRegistrationToken(
+                request.RegistrationToken
+            );
+
+        if (string.IsNullOrWhiteSpace(mobile))
+        {
+            return BaseResponse<VerifyOtpResponse>.Failure(
+                "توکن ثبت‌نام نامعتبر یا منقضی شده است. دوباره کد تایید دریافت کنید."
+            );
+        }
+
+        // نباید قبلاً User ساخته شده باشد
+        var existingUser = await _userRepository
+            .FirstOrDefaultAsync(
+                x => x.PhoneNumber == mobile
+            );
+
+        if (existingUser != null)
+        {
+            return BaseResponse<VerifyOtpResponse>.Failure(
+                "این شماره قبلاً ثبت‌نام شده است. دوباره وارد شوید."
+            );
+        }
+
+        string email;
+
+        if (!string.IsNullOrWhiteSpace(request.Email))
+        {
+            email = request.Email.Trim().ToLowerInvariant();
+
+            var existingEmail =
+                await _userRepository.FirstOrDefaultAsync(
+                    x => x.Email == email
+                );
+
+            if (existingEmail != null)
+            {
+                return BaseResponse<VerifyOtpResponse>.Failure(
+                    "این ایمیل قبلاً استفاده شده است."
+                );
+            }
+        }
+        else
+        {
+            // چون ساختار فعلی دیتابیس Email را Required کرده
+            // فعلاً یک Email داخلی و Unique می‌سازیم
+            email = $"{mobile}@customer.invalid";
+        }
+
+        var customerRole =
+            await _roleRepository.FirstOrDefaultAsync(
+                x => x.Name == Role.Customer
+            );
+
+        if (customerRole == null)
+        {
+            return BaseResponse<VerifyOtpResponse>.Failure(
+                "نقش مشتری در سیستم یافت نشد."
+            );
+        }
+
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+
+            FirstName = request.FirstName.Trim(),
+
+            LastName = request.LastName.Trim(),
+
+            // Username دیگر از کاربر گرفته نمی‌شود
+            UserName = mobile,
+
+            Email = email,
+
+            PhoneNumber = mobile,
+
+            RoleId = customerRole.Id,
+
+            Role = customerRole
+        };
+
+        // Customer اصلاً این Password را نمی‌داند.
+        // فقط برای سازگاری با ساختار فعلی User ساخته می‌شود.
+        var internalPassword =
+            Convert.ToBase64String(
+                RandomNumberGenerator.GetBytes(32)
+            );
+
+        user.PasswordHash =
+            _passwordHasher.HashPassword(
+                user,
+                internalPassword
+            );
+
+        await _userRepository.AddAsync(user);
+
+        await _unitOfWork.SaveChangesAsync();
+
+        var accessToken =
+            _jwtService.GenerateToken(user);
+
+        return BaseResponse<VerifyOtpResponse>.Success(
+            new VerifyOtpResponse
+            {
+                IsRegistered = true,
+                AccessToken = accessToken,
+                RegistrationToken = null,
+                UserId = user.Id,
+                Role = customerRole.Name
+            },
+            "ثبت‌نام با موفقیت انجام شد"
+        );
     }
 }

@@ -7,10 +7,14 @@ namespace PaperSite.Domain.Entities
 {
     public class OtpCode:BaseEntity
     {
-        public Guid UserId { get; set; }
-        public User User { get; set; } = null!;
+        public string PhoneNumber { get; set; } = string.Empty;
+
         public string CodeHash { get; set; } = string.Empty;
+
         public DateTime ExpiresAt { get; set; }
+
         public DateTime? UsedAt { get; set; }
+
+        public int FailedAttempts { get; set; }
     }
 }

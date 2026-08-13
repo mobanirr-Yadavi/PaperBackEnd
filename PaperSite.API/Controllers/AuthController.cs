@@ -15,7 +15,6 @@ public class AuthController : BaseController
         _authService = authService;
         _smsService = smsService;
     }
-
     /// <summary>
     /// ثبت‌نام کاربر جدید در سیستم
     /// </summary>
@@ -29,7 +28,6 @@ public class AuthController : BaseController
         var result = await _authService.RegisterAsync(request);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
-
     /// <summary>
     /// ورود کاربر به سیستم
     /// </summary>
@@ -63,11 +61,33 @@ public class AuthController : BaseController
     /// <param name="request"> ورود با رمز یگبارمصرف و تایید آن </param>
     /// <returns>ارسال پیامک</returns>
     [HttpPost]
-    [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(BaseResponse<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(BaseResponse<VerifyOtpResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BaseResponse<VerifyOtpResponse>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> VerifyOtp(VerifyOtpRequest request)
     {
         var result = await _authService.VerifyOtpAsync(request.Mobile, request.Code);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+    /// <summary>
+    /// تکمیل ثبت نام کاربر جدید پس از تایید شماره موبایل
+    /// </summary>
+    [HttpPost]
+    [ProducesResponseType(
+        typeof(BaseResponse<VerifyOtpResponse>),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(BaseResponse<VerifyOtpResponse>),
+        StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> CompleteRegistration(
+        CompleteRegistrationRequest request)
+    {
+        var result =
+            await _authService.CompleteRegistrationAsync(
+                request
+            );
+
+        return result.IsSuccess
+            ? Ok(result)
+            : BadRequest(result);
     }
 }

@@ -35,16 +35,11 @@ public class ProfileService : IProfileService
             return BaseResponse<ProfileDto>.Failure("User not found");
         }
 
-        var existingPhone = await _userRepository.FirstOrDefaultAsync(x => x.PhoneNumber == request.PhoneNumber && x.Id != userId);
-        if (existingPhone != null)
-        {
-            return BaseResponse<ProfileDto>.Failure("شماره تلفن قبلاً ثبت شده است");
-        }
+
 
         user.FirstName = request.FirstName;
         user.LastName = request.LastName;
         user.UserName = request.UserName;
-        user.PhoneNumber = request.PhoneNumber;
         _userRepository.Update(user);
         await _unitOfWork.SaveChangesAsync();
 
