@@ -12,8 +12,8 @@ using PaperSite.Infrastructure.Persistence;
 namespace PaperSite.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260722062421_init")]
-    partial class init
+    [Migration("20260814073319_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
