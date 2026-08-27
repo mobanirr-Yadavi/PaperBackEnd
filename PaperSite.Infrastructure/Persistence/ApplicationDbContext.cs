@@ -18,6 +18,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<Cart> Carts => Set<Cart>();
     public DbSet<CartItem> CartItems => Set<CartItem>();
     public DbSet<OtpCode> OtpCodes => Set<OtpCode>();
+    public DbSet<Payment> Payments => Set<Payment>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);

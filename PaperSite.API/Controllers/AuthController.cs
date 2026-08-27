@@ -9,11 +9,9 @@ namespace PaperSite.API.Controllers;
 public class AuthController : BaseController
 {
     private readonly IAuthService _authService;
-    private readonly ISmsService _smsService;
-    public AuthController(IAuthService authService,ISmsService smsService)
+    public AuthController(IAuthService authService)
     {
         _authService = authService;
-        _smsService = smsService;
     }
     /// <summary>
     /// ثبت‌نام کاربر جدید در سیستم

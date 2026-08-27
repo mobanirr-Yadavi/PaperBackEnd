@@ -31,9 +31,10 @@ public class AuthService : IAuthService
 
     public async Task<BaseResponse<AuthResponse>> LoginAsync(LoginRequest request)
     {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var user = await _userRepository.Query()
             .Include(x => x.Role)
-            .FirstOrDefaultAsync(x => x.Email == request.Email);
+            .FirstOrDefaultAsync(x => x.Email == normalizedEmail);
 
         if (user == null)
         {
@@ -57,13 +58,15 @@ public class AuthService : IAuthService
 
     public async Task<BaseResponse<AuthResponse>> RegisterAsync(RegisterRequest request)
     {
-        var existingEmail = await _userRepository.FirstOrDefaultAsync(x => x.Email == request.Email);
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var normalizedPhone = request.PhoneNumber.Trim();
+        var existingEmail = await _userRepository.FirstOrDefaultAsync(x => x.Email == normalizedEmail);
         if (existingEmail != null)
         {
             return BaseResponse<AuthResponse>.Failure("ایمیل قبلاً ثبت شده است");
         }
 
-        var existingPhone = await _userRepository.FirstOrDefaultAsync(x => x.PhoneNumber == request.PhoneNumber);
+        var existingPhone = await _userRepository.FirstOrDefaultAsync(x => x.PhoneNumber == normalizedPhone);
         if (existingPhone != null)
         {
             return BaseResponse<AuthResponse>.Failure("شماره تلفن قبلاً ثبت شده است");
@@ -81,8 +84,8 @@ public class AuthService : IAuthService
             FirstName = request.FirstName,
             LastName = request.LastName,
             UserName = request.UserName,
-            Email = request.Email,
-            PhoneNumber = request.PhoneNumber,
+            Email = normalizedEmail,
+            PhoneNumber = normalizedPhone,
             RoleId = customerRole.Id,
             Role = customerRole
         };
@@ -141,13 +144,21 @@ public class AuthService : IAuthService
         await _otpRepository.AddAsync(otp);
         await _unitOfWork.SaveChangesAsync();
 
-        var smsResult = await _smsService.SendOtpAsync(mobile, code);
-
-        if (!smsResult.IsSuccess)
+        try
         {
-            return BaseResponse<bool>.Failure(
-                "ارسال پیامک ناموفق بود"
-            );
+            var smsResult = await _smsService.SendOtpAsync(mobile, code);
+            if (!smsResult.IsSuccess)
+            {
+                _otpRepository.Delete(otp);
+                await _unitOfWork.SaveChangesAsync();
+                return BaseResponse<bool>.Failure("ارسال پیامک ناموفق بود");
+            }
+        }
+        catch
+        {
+            _otpRepository.Delete(otp);
+            await _unitOfWork.SaveChangesAsync();
+            return BaseResponse<bool>.Failure("ارسال پیامک ناموفق بود");
         }
 
         return BaseResponse<bool>.Success(
@@ -196,23 +207,30 @@ public class AuthService : IAuthService
 
         if (verifyResult == PasswordVerificationResult.Failed)
         {
-            otp.FailedAttempts++;
-            otp.UpdatedAt = now;
-
-            _otpRepository.Update(otp);
-            await _unitOfWork.SaveChangesAsync();
+            await _otpRepository.Query()
+                .Where(x => x.Id == otp.Id && x.UsedAt == null)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.FailedAttempts, x => x.FailedAttempts + 1)
+                    .SetProperty(x => x.UpdatedAt, now));
 
             return BaseResponse<VerifyOtpResponse>.Failure(
                 "کد تایید اشتباه یا منقضی شده است"
             );
         }
 
-        // OTP فقط یک بار قابل استفاده است
-        otp.UsedAt = now;
-        otp.UpdatedAt = now;
+        // مصرف اتمیک OTP؛ درخواست هم‌زمان دوم دیگر موفق نمی‌شود
+        var consumed = await _otpRepository.Query()
+            .Where(x => x.Id == otp.Id && x.UsedAt == null && x.FailedAttempts < 5)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.UsedAt, now)
+                .SetProperty(x => x.UpdatedAt, now));
 
-        _otpRepository.Update(otp);
-        await _unitOfWork.SaveChangesAsync();
+        if (consumed == 0)
+        {
+            return BaseResponse<VerifyOtpResponse>.Failure(
+                "کد تایید قبلاً استفاده شده یا نامعتبر است"
+            );
+        }
 
         // آیا کاربر قبلاً ثبت نام کرده؟
         var user = await _userRepository.Query()
@@ -234,15 +252,15 @@ public class AuthService : IAuthService
                     AccessToken = accessToken,
                     RegistrationToken = null,
                     UserId = user.Id,
-                    Role = user.Role.Name
+                    Role = user.Role.Name,
+                    RequiresProfileCompletion = false
                 },
                 "ورود با موفقیت انجام شد"
             );
         }
 
-        // کاربر جدید
-        var registrationToken =
-            _jwtService.GenerateRegistrationToken(mobile);
+        // کاربر جدید تا قبل از تکمیل اطلاعات، Access Token دریافت نمی‌کند.
+        var registrationToken = _jwtService.GenerateRegistrationToken(mobile);
 
         return BaseResponse<VerifyOtpResponse>.Success(
             new VerifyOtpResponse
@@ -251,9 +269,10 @@ public class AuthService : IAuthService
                 AccessToken = null,
                 RegistrationToken = registrationToken,
                 UserId = null,
-                Role = null
+                Role = null,
+                RequiresProfileCompletion = true
             },
-            "شماره موبایل تایید شد. لطفاً اطلاعات خود را تکمیل کنید."
+            "شماره موبایل تایید شد. برای ورود، تکمیل اطلاعات حساب الزامی است."
         );
     }
     public async Task<BaseResponse<VerifyOtpResponse>>
@@ -372,7 +391,8 @@ public class AuthService : IAuthService
                 AccessToken = accessToken,
                 RegistrationToken = null,
                 UserId = user.Id,
-                Role = customerRole.Name
+                Role = customerRole.Name,
+                RequiresProfileCompletion = false
             },
             "ثبت‌نام با موفقیت انجام شد"
         );

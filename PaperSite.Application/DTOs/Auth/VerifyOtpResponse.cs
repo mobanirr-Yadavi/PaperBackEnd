@@ -15,5 +15,7 @@ namespace PaperSite.Application.DTOs.Auth
         public Guid? UserId { get; set; }
 
         public string? Role { get; set; }
+
+        public bool RequiresProfileCompletion { get; set; }
     }
 }

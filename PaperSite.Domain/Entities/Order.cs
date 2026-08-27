@@ -13,4 +13,5 @@ public class Order : BaseEntity
     public string ReceiverFullName { get; set; } = string.Empty;
     public string ReceiverPhoneNumber { get; set; } = string.Empty;
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
+    public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 }
