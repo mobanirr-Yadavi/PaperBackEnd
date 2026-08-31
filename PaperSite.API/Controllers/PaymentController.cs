@@ -26,11 +26,20 @@ public class PaymentController : BaseController
     [AllowAnonymous]
     [Consumes("application/x-www-form-urlencoded")]
     [IgnoreAntiforgeryToken]
-    [ProducesResponseType(StatusCodes.Status302Found)]
-    public async Task<IActionResult> MellatCallback([FromForm] MellatCallbackRequest request,
+    public async Task<IActionResult> MellatCallback(
+        [FromForm] MellatCallbackRequest request,
         CancellationToken cancellationToken)
     {
-        var redirectUrl = await _paymentService.ProcessCallbackAsync(request, cancellationToken);
-        return Redirect(redirectUrl);
+        try
+        {
+            var redirectUrl = await _paymentService.ProcessCallbackAsync(request, cancellationToken);
+            return Redirect(redirectUrl);
+        }
+        catch (Exception ex)
+        {
+            // لاگ ex را در لاگ‌های سرور بررسی کن
+            return Redirect(
+                "https://www.kaghaz20.ir/payment/result?success=false&code=callback_error");
+        }
     }
 }
