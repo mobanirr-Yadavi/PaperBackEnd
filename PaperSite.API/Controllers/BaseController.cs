@@ -4,7 +4,7 @@ using System.Security.Claims;
 namespace PaperSite.API.Controllers;
 
 [ApiController]
-[Route("api/v1/[controller]/[action]")]
+[Route("api-v1/[controller]/[action]")]
 [Produces("application/json")]
 public abstract class BaseController : ControllerBase
 {
