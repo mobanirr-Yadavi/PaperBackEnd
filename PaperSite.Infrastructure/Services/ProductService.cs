@@ -53,8 +53,6 @@ public class ProductService : IProductService
 
     public async Task<BaseResponse<PagedResult<ProductDto>>> SearchAsync(ProductQueryRequest request)
     {
-        var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
-        var pageSize = request.PageSize is < 1 or > 100 ? 10 : request.PageSize;
 
         var query = _productRepository.Query(true).Include(x => x.Category).AsQueryable();
 
@@ -69,7 +67,7 @@ public class ProductService : IProductService
             query = query.Where(x => x.CategoryId == request.CategoryId.Value);
         }
 
-        query = request.SortBy?.Trim().ToLowerInvariant() switch
+        var orderedQuery = request.SortBy?.Trim().ToLowerInvariant() switch
         {
             "price" => request.Descending ? query.OrderByDescending(x => x.Price) : query.OrderBy(x => x.Price),
             "stock" => request.Descending ? query.OrderByDescending(x => x.Stock) : query.OrderBy(x => x.Stock),
@@ -77,19 +75,9 @@ public class ProductService : IProductService
             _ => request.Descending ? query.OrderByDescending(x => x.Name) : query.OrderBy(x => x.Name)
         };
 
-        var totalCount = await query.CountAsync();
-        var products = await query.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync();
-        var items = products.Select(ToDto).ToList();
-
-        return BaseResponse<PagedResult<ProductDto>>.Success(new PagedResult<ProductDto>
-        {
-            Items = items,
-            PageNumber = pageNumber,
-            PageSize = pageSize,
-            TotalCount = totalCount
-        }, "محصولات با موفقیت بازیابی شدند");
+        var page = await orderedQuery.ThenBy(x => x.Id).ToPageAsync(request, ToDto);
+        return BaseResponse<PagedResult<ProductDto>>.Success(page, "محصولات با موفقیت بازیابی شدند");
     }
-
     public async Task<BaseResponse<ProductDto>> GetByIdAsync(Guid id)
     {
         var product = await _productRepository.Query(true).Include(x => x.Category).FirstOrDefaultAsync(x => x.Id == id);
@@ -137,6 +125,12 @@ public class ProductService : IProductService
         return BaseResponse<bool>.Success(true, "محصول با موفقیت حذف شد");
     }
 
+    public async Task<BaseResponse<PagedResult<ProductDto>>> GetPagedAsync(PaginationRequest request, CancellationToken cancellationToken = default)
+    {
+        var page = await _productRepository.Query(true).Include(x => x.Category).OrderBy(x => x.Name).ThenBy(x => x.Id)
+            .ToPageAsync(request, ToDto, cancellationToken);
+        return BaseResponse<PagedResult<ProductDto>>.Success(page);
+    }
     private static ProductDto ToDto(Product product) => new()
     {
         Id = product.Id,

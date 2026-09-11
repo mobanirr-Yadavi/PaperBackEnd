@@ -1,3 +1,4 @@
+using PaperSite.Application.DTOs.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PaperSite.Application.Common.Responses;
@@ -82,5 +83,16 @@ public class CategoryController : BaseController
     {
         var result = await _service.DeleteAsync(id);
         return result.IsSuccess ? Ok(result) : NotFound(result);
+    }
+
+    /// <summary>
+    /// Returns a page of results. Defaults: PageNumber=1, PageSize=10 (maximum 100).
+    /// </summary>
+    [HttpGet]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(BaseResponse<PagedResult<CategoryDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPaged([FromQuery] PaginationRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _service.GetPagedAsync(request, cancellationToken));
     }
 }

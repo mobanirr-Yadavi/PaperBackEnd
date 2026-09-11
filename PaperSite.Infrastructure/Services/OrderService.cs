@@ -1,3 +1,4 @@
+using PaperSite.Application.DTOs.Common;
 using Microsoft.EntityFrameworkCore;
 using PaperSite.Application.Common.Responses;
 using PaperSite.Application.DTOs.Order;
@@ -140,6 +141,18 @@ public class OrderService : IOrderService
         return BaseResponse<OrderDto>.Success(ToDto(order), "وضعیت سفارش با موفقیت تغییر یافت");
     }
 
+    public async Task<BaseResponse<PagedResult<OrderDto>>> GetUserOrdersPagedAsync(Guid userId, PaginationRequest request, CancellationToken cancellationToken = default)
+    {
+        var page = await _orderRepository.Query(true).Include(x => x.Items).Where(x => x.UserId == userId).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+            .ToPageAsync(request, ToDto, cancellationToken);
+        return BaseResponse<PagedResult<OrderDto>>.Success(page);
+    }
+    public async Task<BaseResponse<PagedResult<OrderDto>>> GetAllOrdersPagedAsync(PaginationRequest request, CancellationToken cancellationToken = default)
+    {
+        var page = await _orderRepository.Query(true).Include(x => x.Items).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+            .ToPageAsync(request, ToDto, cancellationToken);
+        return BaseResponse<PagedResult<OrderDto>>.Success(page);
+    }
     private static OrderDto ToDto(Order order) => new()
     {
         Id = order.Id,

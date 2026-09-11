@@ -1,3 +1,4 @@
+using PaperSite.Application.DTOs.Common;
 using PaperSite.Application.Common.Responses;
 using PaperSite.Application.DTOs.Order;
 
@@ -10,4 +11,6 @@ public interface IOrderService
     Task<BaseResponse<IEnumerable<OrderDto>>> GetUserOrdersAsync(Guid userId);
     Task<BaseResponse<IEnumerable<OrderDto>>> GetAllOrdersAsync();
     Task<BaseResponse<OrderDto>> ChangeStatusAsync(Guid orderId, ChangeOrderStatusRequest request);
+    Task<BaseResponse<PagedResult<OrderDto>>> GetUserOrdersPagedAsync(Guid userId, PaginationRequest request, CancellationToken cancellationToken = default);
+    Task<BaseResponse<PagedResult<OrderDto>>> GetAllOrdersPagedAsync(PaginationRequest request, CancellationToken cancellationToken = default);
 }

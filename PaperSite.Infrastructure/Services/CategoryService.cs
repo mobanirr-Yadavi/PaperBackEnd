@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using PaperSite.Application.DTOs.Common;
 using PaperSite.Application.Common.Responses;
 using PaperSite.Application.DTOs.Category;
 using PaperSite.Application.Interfaces;
@@ -74,6 +76,12 @@ public class CategoryService : ICategoryService
         return BaseResponse<bool>.Success(true, "دسته‌بندی با موفقیت حذف شد");
     }
 
+    public async Task<BaseResponse<PagedResult<CategoryDto>>> GetPagedAsync(PaginationRequest request, CancellationToken cancellationToken = default)
+    {
+        var page = await _categoryRepository.Query(true).OrderBy(x => x.Name).ThenBy(x => x.Id)
+            .ToPageAsync(request, ToDto, cancellationToken);
+        return BaseResponse<PagedResult<CategoryDto>>.Success(page);
+    }
     private static CategoryDto ToDto(Category category) => new()
     {
         Id = category.Id,

@@ -1,3 +1,4 @@
+using PaperSite.Application.DTOs.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PaperSite.Application.Common.Responses;
@@ -67,5 +68,16 @@ public class OrderController : BaseController
     {
         var result = await _orderService.ChangeStatusAsync(id, request);
         return result.IsSuccess ? Ok(result) : NotFound(result);
+    }
+
+    /// <summary>
+    /// Returns a page of results. Defaults: PageNumber=1, PageSize=10 (maximum 100).
+    /// </summary>
+    [HttpGet]
+    [Authorize(Policy = "CustomerPolicy")]
+    [ProducesResponseType(typeof(BaseResponse<PagedResult<OrderDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUserOrdersPaged([FromQuery] PaginationRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _orderService.GetUserOrdersPagedAsync(CurrentUserId, request, cancellationToken));
     }
 }

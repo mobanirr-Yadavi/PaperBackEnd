@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using PaperSite.Application.DTOs.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PaperSite.Application.Common.Responses;
 using PaperSite.Application.DTOs.Admin;
@@ -91,5 +92,27 @@ public class AdminController : BaseController
     public async Task<IActionResult> DashboardStatistics()
     {
         return Ok(await _adminService.GetDashboardStatisticsAsync());
+    }
+
+    /// <summary>
+    /// Returns a page of results. Defaults: PageNumber=1, PageSize=10 (maximum 100).
+    /// </summary>
+    [HttpGet]
+
+    [ProducesResponseType(typeof(BaseResponse<PagedResult<UserDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUsersPaged([FromQuery] PaginationRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _adminService.GetUsersPagedAsync(request, cancellationToken));
+    }
+
+    /// <summary>
+    /// Returns a page of results. Defaults: PageNumber=1, PageSize=10 (maximum 100).
+    /// </summary>
+    [HttpGet]
+
+    [ProducesResponseType(typeof(BaseResponse<PagedResult<OrderDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetOrdersPaged([FromQuery] PaginationRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _orderService.GetAllOrdersPagedAsync(request, cancellationToken));
     }
 }

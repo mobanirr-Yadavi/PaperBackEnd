@@ -97,4 +97,15 @@ public class ProductController : BaseController
         var result = await _productService.DeleteAsync(id);
         return result.IsSuccess ? Ok(result) : NotFound(result);
     }
+
+    /// <summary>
+    /// Returns a page of results. Defaults: PageNumber=1, PageSize=10 (maximum 100).
+    /// </summary>
+    [HttpGet]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(BaseResponse<PagedResult<ProductDto>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPaged([FromQuery] PaginationRequest request, CancellationToken cancellationToken)
+    {
+        return Ok(await _productService.GetPagedAsync(request, cancellationToken));
+    }
 }

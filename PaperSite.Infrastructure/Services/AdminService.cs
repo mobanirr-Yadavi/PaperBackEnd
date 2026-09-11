@@ -1,3 +1,4 @@
+using PaperSite.Application.DTOs.Common;
 using Microsoft.EntityFrameworkCore;
 using PaperSite.Application.Common.Responses;
 using PaperSite.Application.DTOs.Admin;
@@ -72,6 +73,12 @@ public class AdminService : IAdminService
         }, "آمار داشبورد با موفقیت بازیابی شد");
     }
 
+    public async Task<BaseResponse<PagedResult<UserDto>>> GetUsersPagedAsync(PaginationRequest request, CancellationToken cancellationToken = default)
+    {
+        var page = await _userRepository.Query(true).Include(x => x.Role).OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id)
+            .ToPageAsync(request, ToDto, cancellationToken);
+        return BaseResponse<PagedResult<UserDto>>.Success(page);
+    }
     private static UserDto ToDto(User user) => new()
     {
         Id = user.Id,

@@ -1,3 +1,4 @@
+using PaperSite.Application.DTOs.Common;
 using PaperSite.Application.Common.Responses;
 using PaperSite.Application.DTOs.Category;
 
@@ -10,4 +11,5 @@ public interface ICategoryService
     Task<BaseResponse<CategoryDto>> CreateAsync(CategoryCreateDto request);
     Task<BaseResponse<CategoryDto>> UpdateAsync(Guid id, CategoryUpdateDto request);
     Task<BaseResponse<bool>> DeleteAsync(Guid id);
+    Task<BaseResponse<PagedResult<CategoryDto>>> GetPagedAsync(PaginationRequest request, CancellationToken cancellationToken = default);
 }
