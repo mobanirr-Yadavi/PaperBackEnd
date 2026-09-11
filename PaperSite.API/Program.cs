@@ -80,6 +80,10 @@ builder.Services.AddOptions<SmsSettings>()
     .Bind(builder.Configuration.GetSection("Sms"))
     .Validate(x => !string.IsNullOrWhiteSpace(x.ApiKey), "Sms:ApiKey is required.")
     .Validate(x => int.TryParse(x.TemplateId, out _), "Sms:TemplateId must be numeric.")
+        .Validate(
+        x => int.TryParse(x.PaymentSuccessTemplateId, out _),
+        "Sms:PaymentSuccessTemplateId must be numeric."
+    )
     .ValidateOnStart();
 builder.Services.AddHttpClient<ISmsService, SmsService>(client =>
 {

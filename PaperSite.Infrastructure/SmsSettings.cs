@@ -8,5 +8,7 @@ namespace PaperSite.Infrastructure
     {
         public string ApiKey { get; set; } = string.Empty;
         public string TemplateId { get; set; } = string.Empty;
+        public string PaymentSuccessTemplateId { get; set; } = string.Empty;
+
     }
 }

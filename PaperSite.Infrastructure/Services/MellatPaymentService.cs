@@ -23,14 +23,16 @@ public class MellatPaymentService : IMellatPaymentService
     private readonly ApplicationDbContext _dbContext;
     private readonly MellatPaymentSettings _settings;
     private readonly ILogger<MellatPaymentService> _logger;
-
+    private readonly ISmsService _smsService;
     public MellatPaymentService(HttpClient httpClient, ApplicationDbContext dbContext,
-        IOptions<MellatPaymentSettings> settings, ILogger<MellatPaymentService> logger)
+        IOptions<MellatPaymentSettings> settings, ILogger<MellatPaymentService> logger,ISmsService smsService)
     {
         _httpClient = httpClient;
         _dbContext = dbContext;
         _settings = settings.Value;
         _logger = logger;
+        _smsService = smsService;
+
     }
 
     public async Task<BaseResponse<PaymentStartDto>> StartAsync(Guid userId, Guid orderId,
@@ -171,16 +173,83 @@ public class MellatPaymentService : IMellatPaymentService
             await _dbContext.SaveChangesAsync(cancellationToken);
             return BuildResultUrl(false, payment.GatewayOrderId, settleCode);
         }
-
         payment.Status = PaymentStatus.Succeeded;
         payment.ResCode = "0";
         payment.ErrorMessage = null;
         payment.VerifiedAt = DateTime.UtcNow;
         payment.UpdatedAt = DateTime.UtcNow;
+
         payment.Order.Status = OrderStatus.Paid;
         payment.Order.UpdatedAt = DateTime.UtcNow;
+
+        // اول پرداخت قطعی داخل دیتابیس ذخیره شود
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return BuildResultUrl(true, payment.GatewayOrderId, "0");
+
+        // بعد از پرداخت موفق، پیامک ارسال می‌شود
+        try
+        {
+            var buyerName =
+                string.IsNullOrWhiteSpace(
+                    payment.Order.ReceiverFullName)
+                    ? "خریدار"
+                    : payment.Order.ReceiverFullName.Trim();
+
+            var mobile =
+                payment.Order.ReceiverPhoneNumber;
+
+            var trackingCode =
+                payment.GatewayOrderId.ToString(
+                    CultureInfo.InvariantCulture);
+
+            var smsResult =
+                await _smsService.SendPaymentSuccessAsync(
+                    mobile,
+                    buyerName,
+                    trackingCode,
+                    cancellationToken
+                );
+
+            if (!smsResult.IsSuccess)
+            {
+                _logger.LogWarning(
+                    "Payment succeeded but SMS failed. " +
+                    "OrderId: {OrderId}, " +
+                    "TrackingCode: {TrackingCode}, " +
+                    "Message: {Message}",
+                    payment.OrderId,
+                    payment.GatewayOrderId,
+                    smsResult.Message
+                );
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Payment success SMS sent. " +
+                    "OrderId: {OrderId}, " +
+                    "TrackingCode: {TrackingCode}",
+                    payment.OrderId,
+                    payment.GatewayOrderId
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Payment succeeded but payment success SMS failed. " +
+                "OrderId: {OrderId}, " +
+                "TrackingCode: {TrackingCode}",
+                payment.OrderId,
+                payment.GatewayOrderId
+            );
+        }
+
+        return BuildResultUrl(
+            true,
+            payment.GatewayOrderId,
+            "0"
+        );
+
     }
 
     private Task<string> CallTransactionAsync(string method, Payment payment, CancellationToken cancellationToken) =>
