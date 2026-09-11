@@ -11,7 +11,7 @@
 | `Admin/GetOrdersPaged` | تمام سفارش‌ها | مدیر |
 | `Order/GetUserOrdersPaged` | سفارش‌های کاربر جاری | CustomerPolicy |
 
-مثال: `/api/v1/Product/GetPaged?PageNumber=2&PageSize=20`
+مثال: `/api/v1/Product/GetPaged?pagenumber=2&pagesize=20`
 
 شماره صفحه از ۱ شروع می‌شود. مقدار پیش‌فرض اندازه صفحه ۱۰ است. شماره کمتر از ۱ به ۱ و اندازه خارج از بازه ۱ تا ۱۰۰ به ۱۰ تبدیل می‌شود؛ مقادیر نهایی در پاسخ برمی‌گردند. ورودی غیرعددی یا خارج از محدوده Int32 توسط API با خطای ۴۰۰ رد می‌شود.
 
@@ -23,19 +23,19 @@
   "time": "2026-09-11T12:00:00",
   "data": {
     "items": [],
-    "pageNumber": 1,
-    "pageSize": 10,
-    "totalCount": 0,
-    "totalPages": 0,
-    "hasPreviousPage": false,
-    "hasNextPage": false
+    "pagenumber": 1,
+    "pagesize": 10,
+    "totalcount": 0,
+    "totalpages": 0,
+    "haspreviouspage": false,
+    "hasnextpage": false
   },
   "message": "Operation completed successfully",
   "errors": []
 }
 ```
 
-فرانت لیست را از `response.data.items` و کنترل صفحه را از سایر فیلدهای `response.data` بخواند (اگر Axios استفاده می‌شود، ابتدا body را از `axiosResponse.data` بگیرید). هنگام تغییر فیلتر، شماره صفحه را به ۱ برگردانید. صفحه خارج از محدوده، آرایه خالی و تعداد کل واقعی برمی‌گرداند؛ شماره صفحه خودکار به آخرین صفحه تغییر نمی‌کند. `hasPreviousPage` صرفاً نشان می‌دهد شماره صفحه بزرگ‌تر از ۱ است.
+فرانت لیست را از `response.data.items` و کنترل صفحه را از سایر فیلدهای `response.data` بخواند (اگر Axios استفاده می‌شود، ابتدا body را از `axiosResponse.data` بگیرید). هنگام تغییر فیلتر، شماره صفحه را به ۱ برگردانید. صفحه خارج از محدوده، آرایه خالی و تعداد کل واقعی برمی‌گرداند؛ شماره صفحه خودکار به آخرین صفحه تغییر نمی‌کند. `haspreviouspage` صرفاً نشان می‌دهد شماره صفحه بزرگ‌تر از ۱ است.
 
 محصولات و دسته‌بندی‌ها بر اساس نام، کاربران و سفارش‌ها از جدید به قدیم مرتب می‌شوند. شناسه به‌عنوان معیار دوم مرتب‌سازی، تساوی‌ها را رفع می‌کند. جستجوی محصولات فیلترها و ترتیب قبلی را حفظ می‌کند. صفحه‌بندی در دیتابیس انجام می‌شود؛ تنها اقلام همان صفحه دریافت می‌شوند. در تغییر هم‌زمان داده‌ها، صفحه‌بندی offset تضمین snapshot بین درخواست‌ها ندارد.
 
@@ -50,3 +50,5 @@ dotnet run --project Pagination.Checks/Pagination.Checks.csproj
 ```
 
 این بررسی از query آزمایشی async استفاده می‌کند و جایگزین تست اتصال به SQL Server نیست.
+
+نام تمام فیلدهای شیء صفحه‌بندی اکنون کاملاً lowercase است. فرانت باید از pagenumber، pagesize، totalcount، totalpages، haspreviouspage و hasnextpage استفاده کند؛ items تغییری ندارد. فیلدهای داخل هر قلم و پوشش بیرونی پاسخ تغییر نکرده‌اند. Query نسبت به بزرگی و کوچکی حروف حساس نیست.
