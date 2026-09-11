@@ -1,3 +1,4 @@
+using PaperSite.API.Security;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -44,26 +45,12 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? Array.Empty<string>();
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("FrontendCors", policy =>
-    {
-        if (allowedOrigins.Length > 0)
-        {
-            policy.WithOrigins(allowedOrigins)
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-        }
-        else if (builder.Environment.IsDevelopment())
-        {
-            policy.AllowAnyOrigin()
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-        }
-    });
-});
+builder.Services.AddSingleton<AuthCookie>();
+builder.Services.AddCors(options => options.AddPolicy("FrontendCors", policy =>
+    policy.WithOrigins(BrowserRequestMiddleware.AllowedOrigins)
+        .AllowCredentials().AllowAnyHeader()
+        .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE")
+        .WithExposedHeaders("Retry-After")));
 builder.Services.Configure<SmsSettings>(
     builder.Configuration.GetSection("Sms")
 );
@@ -75,6 +62,16 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
+    options.ForwardLimit = 1;
+    // Official ArvanCloud ranges; maintain via ReverseProxy:KnownNetworks.
+    var networks = builder.Configuration.GetSection("ReverseProxy:KnownNetworks").Get<string[]>()
+        ?? ["185.143.232.0/22", "188.229.116.16/30", "94.101.182.0/27", "2.144.3.128/28",
+            "37.32.16.0/27", "37.32.17.0/27", "37.32.18.0/27", "37.32.19.0/27",
+            "185.215.232.0/22", "178.131.120.48/28", "94.101.183.0/28",
+            "78.157.36.112/28", "95.38.61.80/28", "193.24.119.0/29"];
+    if (networks.Length == 0) throw new InvalidOperationException("Trusted proxy networks must not be empty.");
+    foreach (var network in networks)
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
 });
 builder.Services.AddOptions<SmsSettings>()
     .Bind(builder.Configuration.GetSection("Sms"))
@@ -170,6 +167,13 @@ builder.Services.AddAuthentication(options =>
     };
     options.Events = new JwtBearerEvents
     {
+        OnMessageReceived = context =>
+        {
+            // The handler parses Bearer AFTER this event. Never override a supplied header.
+            if (!context.Request.Headers.ContainsKey("Authorization"))
+                context.Token = context.Request.Cookies[AuthCookie.Name];
+            return Task.CompletedTask;
+        },
         OnChallenge = async context =>
         {
             context.HandleResponse();
@@ -212,49 +216,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>()
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
 builder.Services.AddHealthChecks().AddDbContextCheck<ApplicationDbContext>();
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-    {
-        var key = context.User.Identity?.IsAuthenticated == true
-            ? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-            : context.Connection.RemoteIpAddress?.ToString();
-        return RateLimitPartition.GetFixedWindowLimiter(key ?? "unknown", _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = 120,
-            Window = TimeSpan.FromMinutes(1),
-            QueueLimit = 0,
-            AutoReplenishment = true
-        });
-    });
-
-    options.AddPolicy("AuthLimiter", context =>
-    {
-        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        var path = context.Request.Path.ToString().ToLowerInvariant();
-
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: $"{ip}:{path}",
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(1),
-                QueueLimit = 0,
-                AutoReplenishment = true
-            });
-    });
-
-    options.AddPolicy("OtpLimiter", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = 3,
-            Window = TimeSpan.FromMinutes(10),
-            QueueLimit = 0,
-            AutoReplenishment = true
-        }));
-});
+builder.Services.AddRateLimiter(ApiRateLimits.Configure);
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment() && string.Equals(builder.Configuration["AllowedHosts"], "*", StringComparison.Ordinal))
@@ -270,7 +232,14 @@ app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 if (!app.Environment.IsDevelopment()) app.UseHsts();
 app.UseRouting();
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    await next(context);
+});
 app.UseCors("FrontendCors");
+app.UseMiddleware<BrowserRequestMiddleware>();
+app.UseMiddleware<OtpValidationMiddleware>();
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseMiddleware<RequestResponseLoggingMiddleware>();

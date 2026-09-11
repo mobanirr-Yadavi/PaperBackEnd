@@ -1,3 +1,5 @@
+using PaperSite.API.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PaperSite.Application.Common.Responses;
 using PaperSite.Application.DTOs.Auth;
@@ -9,9 +11,11 @@ namespace PaperSite.API.Controllers;
 public class AuthController : BaseController
 {
     private readonly IAuthService _authService;
-    public AuthController(IAuthService authService)
+    private readonly AuthCookie _cookie;
+    public AuthController(IAuthService authService, AuthCookie cookie)
     {
         _authService = authService;
+        _cookie = cookie;
     }
     /// <summary>
     /// ثبت‌نام کاربر جدید در سیستم
@@ -24,6 +28,7 @@ public class AuthController : BaseController
     public async Task<IActionResult> Register(RegisterRequest request)
     {
         var result = await _authService.RegisterAsync(request);
+        if (result.IsSuccess) _cookie.Append(Response, result.Data?.Token);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
     /// <summary>
@@ -37,6 +42,7 @@ public class AuthController : BaseController
     public async Task<IActionResult> Login(LoginRequest request)
     {
         var result = await _authService.LoginAsync(request);
+        if (result.IsSuccess) _cookie.Append(Response, result.Data?.Token);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
     /// <summary>
@@ -64,6 +70,7 @@ public class AuthController : BaseController
     public async Task<IActionResult> VerifyOtp(VerifyOtpRequest request)
     {
         var result = await _authService.VerifyOtpAsync(request.Mobile, request.Code);
+        if (result.IsSuccess) _cookie.Append(Response, result.Data?.AccessToken);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
     /// <summary>
@@ -84,8 +91,17 @@ public class AuthController : BaseController
                 request
             );
 
+        if (result.IsSuccess) _cookie.Append(Response, result.Data?.AccessToken);
+
         return result.IsSuccess
             ? Ok(result)
             : BadRequest(result);
+    }
+    [HttpPost]
+    [AllowAnonymous]
+    public IActionResult Logout()
+    {
+        _cookie.Delete(Response);
+        return NoContent();
     }
 }

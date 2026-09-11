@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 using PaperSite.Application.DTOs.Auth;
 using System;
 using System.Collections.Generic;
@@ -12,7 +12,7 @@ namespace PaperSite.Application.Validators.Auth
         {
             RuleFor(x => x.mobileNo)
                 .NotEmpty().WithMessage("شماره موبایل الزامی است.")
-                .Matches(@"^09\d{9}$").WithMessage("شماره موبایل معتبر نیست.");
+                .Matches(@"^09[0-9]{9}$").WithMessage("شماره موبایل معتبر نیست.");
         }
     }
 }

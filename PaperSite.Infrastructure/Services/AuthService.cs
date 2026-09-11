@@ -105,7 +105,7 @@ public class AuthService : IAuthService
     }
     public async Task<BaseResponse<bool>> SendOtpAsync(string mobile)
     {
-        mobile = mobile.Trim();
+        mobile = MobileNumber.Normalize(mobile);
 
         if (string.IsNullOrWhiteSpace(mobile))
         {
@@ -115,18 +115,6 @@ public class AuthService : IAuthService
         }
 
         var now = DateTime.UtcNow;
-
-        var otpCountInLastMinute = await _otpRepository.Query()
-            .CountAsync(x =>
-                x.PhoneNumber == mobile &&
-                x.CreatedAt >= now.AddMinutes(-1));
-
-        if (otpCountInLastMinute >= 3)
-        {
-            return BaseResponse<bool>.Failure(
-                "تعداد درخواست کد بیش از حد مجاز است. لطفاً کمی بعد دوباره تلاش کنید."
-            );
-        }
 
         var code = RandomNumberGenerator
             .GetInt32(100000, 1000000)
@@ -170,7 +158,7 @@ public class AuthService : IAuthService
     string mobile,
     string code)
     {
-        mobile = mobile.Trim();
+        mobile = MobileNumber.Normalize(mobile);
 
         var now = DateTime.UtcNow;
 
